@@ -1,0 +1,14 @@
+# KiCad backup files
+*-backups/
+*.kicad_sch-bak
+*.bak
+*.zip
+
+# KiCad local/session files
+*.kicad_prl
+fp-info-cache
+
+# Temporary / lock files
+*.tmp
+*.lck
+~*
