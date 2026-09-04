@@ -765,7 +765,7 @@
           "group_by": false,
           "label": "Opis",
           "name": "Description",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,
@@ -778,8 +778,8 @@
       "group_symbols": true,
       "include_excluded_from_bom": true,
       "name": "",
-      "sort_asc": true,
-      "sort_field": "Reference"
+      "sort_asc": false,
+      "sort_field": "${EXCLUDE_FROM_BOARD}"
     },
     "connection_grid_size": 50.0,
     "drawing": {
