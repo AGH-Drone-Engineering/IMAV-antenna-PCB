@@ -102,15 +102,17 @@ sudo ./scripts/wfb-keys-provision --role air <ground-station-host>
 # (role = the ROLE of the host you're running this ON, not the peer)
 ```
 
-This copies the peer's half of the keypair over SSH, verifies it arrived
-byte-for-byte intact, installs it with the right permissions on the peer,
-and removes the local copy of the peer's half. Requires root on this host
-(`sudo`) because it writes into `/etc`, but talks to the peer as the
-account you ran `sudo` from (not root — stock Raspberry Pi OS has no root
-SSH login), and needs `sudo` on the peer for that account too. SSH auth to
-the peer can be a password (prompted normally) or a key; passwordless SSH
-key auth plus passwordless `sudo` on the peer makes this run without any
-prompts, useful if you're scripting a fleet of these. See
+This copies the peer's half of the keypair over SSH, verifies the hash of
+the file at its final path on the peer, installs it with the right
+permissions, and removes the local copy of the peer's half.
+
+Requires root on this host (`sudo`) because it writes into `/etc`, and
+reaches the peer using the SSH keys of the account you ran `sudo` from —
+not root, since stock Raspberry Pi OS has no root SSH login. That same
+account needs `sudo` rights on the peer. Both the SSH login and the peer's
+`sudo` can prompt for a password; key-based SSH auth and `NOPASSWD` sudo
+on the peer just mean no prompts. Pass a different peer-side account name
+as the argument after the host if it differs from yours. See
 `scripts/wfb-keys-provision --help`.
 
 ## 6. Reboot
