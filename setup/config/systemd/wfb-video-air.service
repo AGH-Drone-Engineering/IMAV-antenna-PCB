@@ -1,0 +1,18 @@
+[Unit]
+Description=IMAV video source (air) -- feeds udp://127.0.0.1:5602
+# Static and source-agnostic: it only execs the generated script below.
+# All source-specific logic (rtsp/uvc/csi) lives in that generated script,
+# not here -- see setup/lib/90-video.sh and setup/config/video-sources/.
+After=wifibroadcast@drone.service
+Requires=wifibroadcast@drone.service
+BindsTo=wifibroadcast@drone.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wfb-video-air
+Restart=on-failure
+RestartSec=3s
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

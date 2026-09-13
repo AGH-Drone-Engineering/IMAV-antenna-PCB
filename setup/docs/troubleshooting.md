@@ -120,3 +120,49 @@ something else on the same MAVLink network (only relevant once you have
 more than one link feeding one QGC instance — not an MVP concern with a
 single drone/single ground station, but worth knowing if you add a second
 link later).
+
+---
+
+**`wfb-video-air.service` keeps restart-looping.**
+→ Normal and expected until `VIDEO_CAM_URL` points at a real, reachable
+camera — `Restart=on-failure` means it just keeps trying. Confirm that's
+actually the cause, and get the real error instead of digging through
+`journalctl`:
+```sh
+sudo /usr/local/bin/wfb-video-air
+```
+The common real-world message with no camera connected (or a wrong
+`VIDEO_CAM_URL`/unreachable IP) is GStreamer's own `Could not open resource
+for reading and writing. Failed to connect. (Timeout while waiting for
+server response)`. Once the camera answers, the loop stops on its own —
+nothing needs re-running.
+
+---
+
+**`VIDEO_SOURCE='...' has no matching module` at install time.**
+→ Typo in `link.conf`, or a source that hasn't been implemented yet (only
+`rtsp` ships — see `docs/integration.md` for adding `uvc`/`csi`). The error
+message itself lists what's actually available in
+`config/video-sources/`.
+
+---
+
+**Video is choppy, or `wfb-cli` reports `trunc` on the video stream.**
+→ Two different things, don't confuse them:
+- `trunc` means a payload exceeded wfb-ng's `radio_mtu` (1445) — the
+  shipped `rtsp` pipeline sets `mtu=1400` specifically to avoid this; if
+  you wrote a custom source module, check its `mtu=` value.
+- Choppy-but-not-`trunc`-video is almost always an airtime budget problem:
+  `VIDEO_BITRATE_KBPS` (inflated by `FEC_VIDEO_N`/`FEC_VIDEO_K` overhead) is
+  too high for the current `BANDWIDTH`/`MCS_INDEX`. `50-config.sh` warns
+  about this automatically at install time — re-run `--only 50-config` and
+  read the warning, or see `docs/tuning.md` for the numbers behind it.
+
+---
+
+**Ground station's `rtsp@<codec>` won't accept the stream / stays empty.**
+→ `VIDEO_CODEC` must be identical on both ends — the air side picks
+depay/parse/pay GStreamer elements by this value, the ground station picks
+which `rtsp@` systemd instance to enable. `h265` on one end and `h264` on
+the other means the gs side is running the wrong decoder for what's
+actually arriving.

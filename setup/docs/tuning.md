@@ -30,8 +30,9 @@ firmware injection instability on this chipset.
 **Bitrate budget, concretely:** at MCS1/10 MHz, 6.5 Mbit/s PHY, halved again
 by the 1:1 FEC redundancy on the MAVLink and tunnel streams, leaves roughly
 2-3 Mbit/s of real headroom. MAVLink telemetry is a few tens of kbit/s, so
-the MVP (SSH + MAVLink) isn't within an order of magnitude of that ceiling
-— the spare capacity is exactly what phase-2 video will need to fit into.
+SSH + MAVLink alone isn't within an order of magnitude of that ceiling — the
+spare capacity is exactly what video needs to fit into. See "Video bandwidth
+budget" below for the concrete numbers.
 
 ## TX power
 
@@ -79,10 +80,50 @@ closes a partial block after N milliseconds so a single heartbeat packet
 doesn't get stuck. The MVP defaults (`fec_k=1, fec_n=2` — 100% redundancy —
 for both MAVLink and the tunnel) mean every packet is immediately
 duplicated with one parity packet: no waiting, maximum robustness, and the
-overhead is irrelevant at these bitrates. Video (phase 2) uses `fec_k=8,
-fec_n=12` instead — 50% overhead amortized over a much higher-rate stream,
-where waiting a few packets for a block to fill costs microseconds, not
-noticeable latency.
+overhead is irrelevant at these bitrates. Video uses `fec_k=8, fec_n=12`
+instead — 50% overhead amortized over a much higher-rate stream, where
+waiting a few packets for a block to fill costs microseconds, not
+noticeable latency. There's deliberately no `FEC_VIDEO_TIMEOUT`: unlike the
+sparse MAVLink/tunnel streams, video fills a 12-packet block in
+milliseconds at any real bitrate, so there's nothing to force-close.
+
+## Video bandwidth budget
+
+`50-config.sh` checks this automatically at install time (a warning, not a
+hard stop) whenever `VIDEO_ENABLE=1`, because a camera bitrate that was
+never sized against the actual radio settings is one of the hardest things
+to diagnose after the fact — it just looks like "video breaks up
+sometimes," which could be a dozen other things.
+
+The check: `VIDEO_BITRATE_KBPS × FEC_VIDEO_N / FEC_VIDEO_K` (the camera's
+bitrate inflated by FEC overhead — what the radio actually has to carry)
+against 40% of the nominal PHY rate for the current `MCS_INDEX`/`BANDWIDTH`
+(the MCS table above). That 40% is a **conservative rule of thumb, not a
+calibrated link model** — FEC overhead is already counted separately above,
+so this factor stands in for everything else raw 802.11 injection doesn't
+give you for free (no retries, radiotap/802.11 header overhead, inter-frame
+gaps), plus the fact that MAVLink and the SSH tunnel are sharing the same
+airtime. Real achievable throughput depends on distance, antennas, and
+interference, none of which the installer can know — treat a passing check
+as "should be in the right neighborhood," not a guarantee, and a failing
+one as "almost certainly won't work," not just a stylistic warning.
+
+Concretely, with the defaults (`VIDEO_BITRATE_KBPS=2000`, `FEC_VIDEO_N=12`,
+`FEC_VIDEO_K=8` → ~3000 kbps on air):
+
+| MCS/bandwidth | Nominal PHY | 40% threshold | 2000 kbps camera fits? |
+|---|---|---|---|
+| MCS1 / 20 MHz | 13 Mbit/s | 5200 kbps | Yes |
+| MCS1 / 10 MHz | 6.5 Mbit/s | 2600 kbps | **No** — this is the long-range setting the rest of this doc recommends, and it doesn't have room for a 2 Mbit/s camera stream at MCS1 |
+| MCS3 / 10 MHz | 13 Mbit/s | 5200 kbps | Yes |
+
+So going narrowband for range (10 MHz) and running video at the same time
+means either raising `MCS_INDEX` (less range, matching the MCS3/10MHz row
+above) or lowering `VIDEO_BITRATE_KBPS` to fit MCS1's smaller budget — not
+both defaults at once. There's no universally correct answer here; it's a
+real tradeoff between range and video quality that depends on what the
+mission actually needs, which is why this is a warning you make a call on,
+not a value the installer picks for you.
 
 ## The legal picture — read this before transmitting at real power
 

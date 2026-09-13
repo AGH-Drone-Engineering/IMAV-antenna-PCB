@@ -101,6 +101,8 @@ Generate a new wfb-ng keypair now? [y/N] y
 [+] ==> stage 80-payload
 [+] Adding enable_uart=1 to /boot/firmware/config.txt
 [+] Removing serial console entry from /boot/firmware/cmdline.txt
+[+] ==> stage 90-video
+[+] VIDEO_ENABLE=0 -- skipping the video stage entirely (no packages installed, no units touched).
 [+] Done. Next steps:
 [+]   1. If this is the first install on this pair, provision keys:
 [+]        ./scripts/wfb-keys-provision --role air <peer-host>
@@ -153,7 +155,10 @@ You should see non-zero `udp` counters and RSSI/SNR on both antenna columns
 within a few seconds of both services being up. If not, `./scripts/wfb-doctor`
 runs the standard set of checks in one shot.
 
-Then: `docs/integration.md` for actually plugging in SSH and MAVLink.
+Then: `docs/integration.md` for actually plugging in SSH, MAVLink, and (once
+a camera is available) video — `VIDEO_ENABLE=0` by default, so this install
+carried no video packages or services at all; turning it on later is a
+`link.conf` edit plus `--only 90-video` on each end, not a reinstall.
 
 ## After a kernel update
 

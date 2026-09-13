@@ -3,8 +3,9 @@
 A long-range digital radio link between a drone and a ground station, built on
 two [BL-M8812EU2](https://openfpv.com.ua/en/hardware/net-cards/rtl8812eu)
 (RTL8812EU chipset) modules mounted on this repo's carrier board, running
-[wfb-ng](https://github.com/svpcom/wfb-ng). Carries **SSH and MAVLink** today;
-video is designed in but not wired up yet (see `docs/integration.md`).
+[wfb-ng](https://github.com/svpcom/wfb-ng). Carries **SSH and MAVLink**, plus
+an optional **video** stage — an IP camera over RTSP ships today, and the
+source is pluggable (USB/HDMI, Pi camera) for later — see `docs/integration.md`.
 
 This is **not** a WiFi network. The cards run in monitor mode and inject raw
 802.11 frames — there's no AP, no association, no DHCP. wfb-ng multiplexes
@@ -71,13 +72,13 @@ How to actually plug in SSH/MAVLink (and later a camera):
 | `VERSIONS` | Pinned driver/wfb-ng versions (maintainer-level, not operator-level) |
 | `install.sh` | Entrypoint — `sudo ./install.sh --role air\|gs [flags]`, see `--help` |
 | `lib/` | Installer stages, run in order, each independently re-runnable (`--only`) |
-| `config/` | Templates and system files the installer places |
+| `config/` | Templates and system files the installer places (includes `video-sources/` — pluggable camera modules) |
 | `scripts/` | Diagnostics and key provisioning, also usable standalone |
 | `docs/` | Install walkthrough, integration guide, troubleshooting, RF tuning |
 
 ## Docs
 
 - **[docs/install.md](docs/install.md)** — installing on both Pis from a clean OS image
-- **[docs/integration.md](docs/integration.md)** — wiring up SSH, MAVLink, and (later) a camera
+- **[docs/integration.md](docs/integration.md)** — wiring up SSH, MAVLink, and a camera
 - **[docs/troubleshooting.md](docs/troubleshooting.md)** — symptom → cause → command
 - **[docs/tuning.md](docs/tuning.md)** — MCS/bandwidth tradeoffs, antennas, power ladder, the legal picture

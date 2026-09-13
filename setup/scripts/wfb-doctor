@@ -50,6 +50,22 @@ done
 section "Tunnel interfaces (drone-wfb / gs-wfb)"
 ip -brief addr show 2>/dev/null | grep -E 'drone-wfb|gs-wfb' || echo "Neither tunnel interface is up."
 
+section "Video (phase 2)"
+if [ -f /usr/local/bin/wfb-video-air ]; then
+    echo "Generated pipeline script: present (/usr/local/bin/wfb-video-air)"
+else
+    echo "Generated pipeline script: not present (VIDEO_ENABLE=0, or 90-video hasn't run on the air role)"
+fi
+air_state="$(systemctl is-active wfb-video-air.service 2>/dev/null || true)"
+echo "wfb-video-air.service: ${air_state:-not found}"
+for codec in h264 h265; do
+    state="$(systemctl is-active "rtsp@${codec}.service" 2>/dev/null || true)"
+    [ -n "$state" ] && echo "rtsp@${codec}.service: $state"
+done
+echo "Video streams (udp 5602 air-side listen, 5600 gs-side forward) carry no"
+echo "counters of their own outside wfb-cli -- check wfb-cli's video pane for"
+echo "non-zero traffic, and watch for 'trunc' (payload over radio_mtu)."
+
 section "Link config fingerprint"
 if [ -f /etc/wifibroadcast.cfg ]; then
     echo "sha256 of /etc/wifibroadcast.cfg: $(sha256sum /etc/wifibroadcast.cfg | cut -c1-16)"

@@ -135,6 +135,71 @@ _config_validate() {
             ''|*[!0-9]*) die "MAVLINK_UDP_PORT must be numeric (got '$MAVLINK_UDP_PORT')." ;;
         esac
     fi
+
+    if [ "$VIDEO_ENABLE" = "1" ]; then
+        _video_config_validate
+    fi
+}
+
+# Split out from _config_validate so it's a no-op (never even evaluated) when
+# VIDEO_ENABLE=0 -- a plain SSH+MAVLink install shouldn't have to care that
+# any of this exists.
+_video_config_validate() {
+    case "$VIDEO_CODEC" in
+        h264|h265) ;;
+        *) die "VIDEO_CODEC must be h264 or h265 (got '$VIDEO_CODEC')." ;;
+    esac
+
+    local video_mod="$HERE/config/video-sources/${VIDEO_SOURCE}.sh"
+    if [ ! -f "$video_mod" ]; then
+        # `|| true`: same reasoning as lib/90-video.sh's _video_load_module --
+        # this `ls` only builds a helpful error message and must never itself
+        # abort the script before the die() below runs.
+        local available
+        available="$(ls "$HERE/config/video-sources" 2>/dev/null | sed 's/\.sh$//' | tr '\n' ' ')" || true
+        die "VIDEO_SOURCE='$VIDEO_SOURCE' has no matching module ($video_mod not found). Available: ${available:-none}."
+    fi
+
+    case "$FEC_VIDEO_K" in ''|*[!0-9]*) die "FEC_VIDEO_K must be numeric (got '$FEC_VIDEO_K')." ;; esac
+    case "$FEC_VIDEO_N" in ''|*[!0-9]*) die "FEC_VIDEO_N must be numeric (got '$FEC_VIDEO_N')." ;; esac
+    if [ "$FEC_VIDEO_K" -gt "$FEC_VIDEO_N" ]; then
+        die "FEC_VIDEO_K ($FEC_VIDEO_K) must be <= FEC_VIDEO_N ($FEC_VIDEO_N) -- k is data packets per block, n is total packets per block."
+    fi
+
+    _video_bandwidth_check
+}
+
+# PHY rate table (Mbit/s x10, HT/1 spatial stream/long GI, @20MHz), indexed
+# by MCS_INDEX -- matches the table in docs/tuning.md. @10MHz is half of this.
+_MCS_RATE_X10_20MHZ=(65 130 195 260 390 520 585 650)
+
+# This is a conservative rule-of-thumb budget check, NOT a calibrated link
+# model -- real achievable throughput depends on distance, antennas, and
+# interference, none of which the installer can know. It exists to catch the
+# single most common and hardest-to-diagnose-in-the-field mistake: a camera
+# bitrate that was never sized against the actual radio settings.
+_video_bandwidth_check() {
+    local rate_x10="${_MCS_RATE_X10_20MHZ[$MCS_INDEX]}"
+    if [ "$BANDWIDTH" = "10" ]; then
+        rate_x10=$((rate_x10 / 2))
+    fi
+    local phy_kbps=$((rate_x10 * 100))                       # x10 Mbit/s -> kbit/s
+    local air_kbps=$((VIDEO_BITRATE_KBPS * FEC_VIDEO_N / FEC_VIDEO_K))  # payload inflated by FEC overhead
+
+    # 40% of nominal PHY: FEC overhead is already counted above in air_kbps,
+    # so this factor is purely for everything else raw 802.11 injection
+    # doesn't give you for free -- no retries, radiotap/802.11 header
+    # overhead, inter-frame gaps -- plus the MAVLink and tunnel streams
+    # sharing the same airtime. docs/tuning.md's own numbers put realistic
+    # throughput at roughly a third to a half of nominal PHY; 40% sits in
+    # that range without being falsely precise about it.
+    local threshold_kbps=$((phy_kbps * 40 / 100))
+
+    if [ "$air_kbps" -gt "$threshold_kbps" ]; then
+        warn "Video bandwidth budget: ${VIDEO_BITRATE_KBPS} kbps camera x FEC ${FEC_VIDEO_N}/${FEC_VIDEO_K} overhead = ~${air_kbps} kbps on air, against a ${phy_kbps} kbps nominal PHY rate at MCS${MCS_INDEX}/${BANDWIDTH}MHz."
+        warn "That's above the conservative ~40% real-world-throughput mark this installer checks against (MAVLink and the SSH tunnel also need airtime, and raw 802.11 injection has no retries to fall back on)."
+        warn "Expect the video stream to break up, especially at range. Lower VIDEO_BITRATE_KBPS, raise MCS_INDEX, or use BANDWIDTH=20 instead of 10 -- see docs/tuning.md. This is a warning, not a hard stop: install proceeds."
+    fi
 }
 
 _config_compute_derived() {

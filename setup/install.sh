@@ -52,7 +52,12 @@ PAYLOAD
                              computer / SITL).           [MAVLINK_UDP_PORT]
   --qgc-host ADDR            Where to send MAVLink on the gs side   [QGC_HOST]
   --qgc-port N                UDP port for QGC                      [QGC_PORT]
-  --enable-video              Turn on the phase-2 video service.  [VIDEO_ENABLE]
+  --enable-video              Turn on the video stage (90-video): on the air
+                             role, installs and starts a pipeline for
+                             VIDEO_SOURCE; on gs, enables rtsp@<codec> if
+                             VIDEO_RTSP_SERVER=1. Configure VIDEO_* in
+                             link.conf first -- see docs/integration.md.
+                                                                [VIDEO_ENABLE]
 
 KEYS
   --import-key FILE          Install an existing key instead of generating one.
@@ -62,7 +67,8 @@ KEYS
 FLOW CONTROL
   --only STAGE                Run a single stage, e.g. --only 50-config.
                                Stages: 10-packages 20-headers 30-driver
-                               40-wfb-ng 50-config 60-keys 70-services 80-payload
+                               40-wfb-ng 50-config 60-keys 70-services
+                               80-payload 90-video
   --force-driver               Rebuild the DKMS driver even if already installed.
   --dry-run                    Print what would happen; change nothing.
   --yes                        Don't prompt for confirmation.
@@ -76,6 +82,10 @@ EXAMPLES
 
   # moving from bench to field -- one flag, or one line in link.conf:
   sudo ./install.sh --role air --power-source external --txpower 1500 --only 50-config
+
+  # camera arrived -- set VIDEO_* in link.conf, then on both ends:
+  sudo ./install.sh --role air --enable-video --only 90-video
+  sudo ./install.sh --role gs  --enable-video --only 90-video
 
 WARNING: never transmit without both antennas fitted -- this module has no
 antenna-lost protection and you will destroy the power amplifier.
@@ -187,6 +197,7 @@ export MAVLINK_SERIAL MAVLINK_BAUD MAVLINK_UDP_PORT QGC_HOST QGC_PORT MAVLINK_SY
 export TUNNEL_IP_AIR TUNNEL_IP_GS TUNNEL_PREFIX
 export VIDEO_ENABLE VIDEO_SOURCE VIDEO_CAM_URL VIDEO_DEV
 export VIDEO_WIDTH VIDEO_HEIGHT VIDEO_FPS VIDEO_BITRATE_KBPS
+export VIDEO_CODEC VIDEO_RTSP_LATENCY VIDEO_RTSP_PROTOCOLS VIDEO_RTSP_SERVER
 # shellcheck source=VERSIONS
 source "$HERE/VERSIONS"
 export DRIVER_REPO DRIVER_BRANCH DRIVER_COMMIT
@@ -206,7 +217,7 @@ banner_safety_warning() {
 }
 banner_safety_warning
 
-STAGES=(10-packages 20-headers 30-driver 40-wfb-ng 50-config 60-keys 70-services 80-payload)
+STAGES=(10-packages 20-headers 30-driver 40-wfb-ng 50-config 60-keys 70-services 80-payload 90-video)
 
 for s in "${STAGES[@]}"; do
     if [ -n "$ONLY" ] && [ "$ONLY" != "$s" ]; then

@@ -23,9 +23,10 @@ while [ $# -gt 0 ]; do
             cat <<'EOF'
 Usage: sudo ./uninstall.sh [--yes] [--dry-run]
 
-Stops wifibroadcast@drone/@gs, removes the DKMS driver, purges the wfb-ng
-apt package, and removes the modprobe.d/NetworkManager files this installer
-placed. Leaves /etc/drone.key, /etc/gs.key, and boot config files alone
+Stops wifibroadcast@drone/@gs and the video services (wfb-video-air,
+rtsp@h264/h265), removes the DKMS driver, purges the wfb-ng apt package, and
+removes the modprobe.d/NetworkManager/video files this installer placed.
+Leaves /etc/drone.key, /etc/gs.key, and boot config files alone
 (config.txt/cmdline.txt changes are left in place; their .bak.* backups are
 next to them if you want to diff and restore manually).
 EOF
@@ -41,8 +42,20 @@ warn "This will stop wfb-ng services, remove the DKMS driver, and purge the wfb-
 confirm_or_die "Proceed?"
 
 log "Stopping services"
-run systemctl disable --now wifibroadcast@drone 2>/dev/null || true
-run systemctl disable --now wifibroadcast@gs 2>/dev/null || true
+# No `2>/dev/null` on these: it would redirect the WHOLE `run ...` command's
+# stderr, including run()'s own transcript line (which is written to stderr
+# by design -- see lib/common.sh), not just systemctl's "unit not loaded"
+# noise. Verified empirically: that redirect silently ate every one of these
+# transcript lines, in both dry-run and real runs. `|| true` alone is enough
+# to keep going past a service that was never installed; a stray "unit not
+# found" from systemctl on stderr is informative, not noise worth hiding.
+run systemctl disable --now wifibroadcast@drone || true
+run systemctl disable --now wifibroadcast@gs || true
+run systemctl disable --now wfb-video-air.service || true
+run systemctl disable --now rtsp@h264.service || true
+run systemctl disable --now rtsp@h265.service || true
+run rm -f /etc/systemd/system/wfb-video-air.service
+run rm -f /usr/local/bin/wfb-video-air
 
 log "Removing DKMS driver"
 if command -v dkms >/dev/null 2>&1; then
@@ -62,9 +75,9 @@ run rm -rf /usr/src/realtek-rtl88x2eu-*
 
 log "Purging wfb-ng"
 if command -v apt-mark >/dev/null 2>&1; then
-    run apt-mark unhold wfb-ng 2>/dev/null || true
+    run apt-mark unhold wfb-ng || true
 fi
-run apt-get purge -y wfb-ng 2>/dev/null || true
+run apt-get purge -y wfb-ng || true
 run rm -f /etc/apt/sources.list.d/wfb-ng.list /usr/share/keyrings/wfb-ng.gpg
 
 log "Removing config files placed by install.sh"
