@@ -1,0 +1,24 @@
+# ============================================================================
+# setup/link.conf.local.example
+#
+# Copy this to setup/link.conf.local (gitignored, never committed) to
+# override values from link.conf for THIS HOST ONLY. Use it for things that
+# legitimately differ between air and gs -- WIFI_TXPOWER (ground station
+# usually has a bigger battery and a heatsink) and QGC_HOST are the normal
+# candidates.
+#
+# ⚠ Do NOT put RADIO-section values here (WIFI_CHANNEL, BANDWIDTH, MCS_INDEX,
+#   STBC, LDPC, SHORT_GI, LINK_DOMAIN, WIFI_REGION). Those must match on both
+#   ends, and install.sh warns if link.conf.local overrides one of them.
+#   install.sh also prints a SHA-256 of the effective radio section so you
+#   can compare both ends at a glance without transmitting the config itself.
+# ============================================================================
+
+# Example: ground station has an external 12V->5V supply and a heatsink,
+# so it can run higher power than the air unit's bench USB feed.
+# POWER_SOURCE=external
+# WIFI_TXPOWER=1500
+
+# Example: QGroundControl runs on a separate laptop on the LAN instead of
+# on the ground-station Pi itself.
+# QGC_HOST=192.168.1.50

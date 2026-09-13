@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# setup/scripts/wfb-keys-provision — distribute the wfb-ng keypair to the peer
+# host, over whatever network already exists (LAN/wlan0) before the wfb-ng
+# link itself is up.
+#
+# Background: wfb_keygen writes drone.key AND gs.key together, as a matched
+# pair, into whatever directory it's run in (install.sh's 60-keys stage runs
+# it in /etc on whichever host generates first). So after that stage runs on
+# ONE host, that host holds BOTH halves locally -- its own half (which it
+# must keep) and the peer's half (which it must ship over and then delete,
+# never leaving a copy of the other end's key lying around).
+#
+# This script does exactly that: scp the peer's half across, verify the
+# bytes arrived intact via a source/destination SHA-256 comparison (real
+# transfer-integrity check, not a cryptographic pairing check -- the two
+# key files are legitimately different content), chmod it on the far end,
+# then shred the local copy.
+set -Eeuo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: wfb-keys-provision --role air|gs <peer-host> [peer-user] [peer-ssh-port]
+
+Run this on the host that just generated a NEW keypair (install.sh's key
+stage tells you to). --role must match what THIS host is (air or gs) --
+it determines which key file this host keeps and which one gets shipped
+to the peer.
+
+  air host keeps /etc/drone.key, ships /etc/gs.key to the peer
+  gs  host keeps /etc/gs.key,    ships /etc/drone.key to the peer
+
+Examples:
+  ./scripts/wfb-keys-provision --role air 192.168.1.50
+  ./scripts/wfb-keys-provision --role gs  raspberrypi-drone.local pi 22
+EOF
+}
+
+ROLE=""
+PEER_HOST=""
+PEER_USER="root"
+PEER_PORT="22"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --role) ROLE="$2"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *)
+            if [ -z "$PEER_HOST" ]; then PEER_HOST="$1";
+            elif [ "$PEER_USER" = "root" ]; then PEER_USER="$1";
+            else PEER_PORT="$1"; fi
+            shift ;;
+    esac
+done
+
+[[ "$ROLE" =~ ^(air|gs)$ ]] || { usage; echo; echo "ERROR: --role air|gs is required." >&2; exit 1; }
+[ -n "$PEER_HOST" ] || { usage; echo; echo "ERROR: peer host is required." >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "ERROR: run as root (needs to read/chmod /etc/*.key)." >&2; exit 1; }
+
+if [ "$ROLE" = "air" ]; then own_key=drone.key; peer_key=gs.key; else own_key=gs.key; peer_key=drone.key; fi
+
+[ -f "/etc/$own_key" ] || { echo "ERROR: /etc/$own_key not found -- run install.sh first." >&2; exit 1; }
+
+if [ ! -f "/etc/$peer_key" ]; then
+    echo "No local copy of /etc/$peer_key -- nothing to send (either it was already"
+    echo "shipped and shredded, or this host imported its key rather than generating"
+    echo "it). Local fingerprint of /etc/$own_key: $(sha256sum "/etc/$own_key" | cut -c1-16)"
+    exit 0
+fi
+
+echo "==> Sending /etc/$peer_key to ${PEER_USER}@${PEER_HOST}:22 (port $PEER_PORT)"
+local_hash="$(sha256sum "/etc/$peer_key" | cut -d' ' -f1)"
+
+scp -P "$PEER_PORT" "/etc/$peer_key" "${PEER_USER}@${PEER_HOST}:/tmp/${peer_key}.incoming"
+remote_hash="$(ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "sha256sum /tmp/${peer_key}.incoming | cut -d' ' -f1")"
+
+if [ "$local_hash" != "$remote_hash" ]; then
+    echo "ERROR: transfer integrity check FAILED." >&2
+    echo "  local:  $local_hash" >&2
+    echo "  remote: $remote_hash" >&2
+    echo "NOT shredding the local copy. Re-run this script." >&2
+    ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "rm -f /tmp/${peer_key}.incoming" || true
+    exit 1
+fi
+
+echo "==> Transfer verified (sha256: ${local_hash:0:16}...). Installing on peer."
+ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "install -D -m 0600 /tmp/${peer_key}.incoming /etc/${peer_key} && rm -f /tmp/${peer_key}.incoming"
+
+echo "==> Removing local copy of the peer's key (we don't keep it here)"
+if command -v shred >/dev/null 2>&1; then
+    shred -u "/etc/$peer_key"
+else
+    rm -f "/etc/$peer_key"
+fi
+
+echo
+echo "Done. This host keeps /etc/$own_key. Peer now has /etc/$peer_key."
+echo "Local fingerprint of /etc/$own_key: $(sha256sum "/etc/$own_key" | cut -c1-16)"

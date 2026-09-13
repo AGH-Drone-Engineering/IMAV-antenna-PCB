@@ -1,0 +1,53 @@
+# ============================================================================
+# setup/VERSIONS — the only place driver/wfb-ng versions are pinned.
+#
+# Sourced by lib/30-driver.sh and lib/40-wfb-ng.sh. This is a maintainer-level
+# file (what code we build/install), distinct from link.conf (operator-level:
+# what radio/payload settings to use). Bump these deliberately, on both ends
+# at once, and re-run the affected install stages.
+# ============================================================================
+
+# --- RTL8812EU / RTL8822EU driver -------------------------------------------
+# svpcom/rtl8812eu (the fork wfb-ng's own docs point at) is 3 commits behind
+# its own upstream parent, and those 3 commits are exactly the
+# set_monitor_channel compat fix for kernel >= 6.12 / >= 6.12.101 (Debian 13 /
+# Raspberry Pi OS Trixie territory). We build from the parent instead.
+#
+# svpcom/rtl8812eu has NO 'master' branch and NO tags (branches: pr1, pr2,
+# v5.15.0.1 — v5.15.0.1 is its default branch). Never `git clone -b master`.
+DRIVER_REPO="https://github.com/libc0607/rtl88x2eu-20230815.git"
+DRIVER_BRANCH="v5.15.0.1"
+DRIVER_COMMIT="934f0dc0b842ec09886a1d50a71cb271d7561d23"
+# DKMS package name/version are NOT pinned here -- lib/30-driver.sh reads
+# them straight out of the cloned tree's own dkms.conf (PACKAGE_NAME=
+# "realtek-rtl88x2eu", PACKAGE_VERSION="5.15.0.1~20230815" as of the pinned
+# commit above). Deriving them avoids a silent mismatch if a future commit
+# bump changes those fields without this file being updated to match.
+#
+# ⚠ If you bump DRIVER_COMMIT to a newer commit on the SAME branch without
+# the driver's own dkms.conf PACKAGE_VERSION changing, 30-driver.sh will see
+# the (unchanged) name/version already registered with DKMS and skip the
+# rebuild. Always pass --force-driver when bumping DRIVER_COMMIT.
+
+# Fallback if the above fails to build on your kernel (older, but what
+# wfb-ng's own install_gs.sh historically pointed at):
+#   DRIVER_REPO="https://github.com/svpcom/rtl8812eu.git"
+#   DRIVER_BRANCH="v5.15.0.1"
+#   DRIVER_COMMIT="48e6e449e089fa954e4e15079bd864039e2960da"
+
+# --- wfb-ng ------------------------------------------------------------------
+# apt.wfb-ng.org ships two components: 'master' (rolling) and 'release-25.01'
+# (stable-ish). On Trixie, release-25.01's package index is EMPTY on every
+# architecture — verified against dists/trixie/release-25.01/binary-*/Packages
+# (zero-byte file, matches the SHA256 of an empty string). So on Trixie
+# 'master' is the only channel that works at all; pin exactly and apt-mark
+# hold, because otherwise you are tracking a rolling snapshot unknowingly.
+#
+# BOTH ends of the link MUST run the identical wfb-ng version.
+WFB_APT_COMPONENT="master"
+WFB_VERSION="26.8.27.51673-0~trixie"
+
+# If you install on Bookworm instead (documented fallback platform if the
+# driver fails to build against Trixie's kernel — see docs/troubleshooting.md):
+#   WFB_APT_COMPONENT="master"
+#   WFB_VERSION="26.8.27.51673-0~bookworm"

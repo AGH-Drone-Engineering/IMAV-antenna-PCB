@@ -1,0 +1,12 @@
+# Force LF line endings for everything text-based, regardless of the
+# committer's platform. Without this, a shell script edited/committed on
+# Windows can pick up CRLF, and bash on the Pi will fail with:
+#   -bash: ./install.sh: /bin/bash^M: bad interpreter: No such file or directory
+# which looks like a missing interpreter but is actually a stray \r in the
+# shebang line. See setup/README.md "Workflow" section.
+* text=auto eol=lf
+*.sh text eol=lf
+*.cfg text eol=lf
+*.cfg.in text eol=lf
+*.conf text eol=lf
+*.md text eol=lf

@@ -1,0 +1,10 @@
+# Host-specific overrides — never shared between air and gs, never committed.
+link.conf.local
+
+# Keys are matched pairs; committing either half is a security incident,
+# not a mistake to `git rm` your way out of. See keys/.gitignore too.
+*.key
+
+# Editor/OS noise
+*.swp
+.DS_Store
