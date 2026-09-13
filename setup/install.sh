@@ -228,13 +228,15 @@ print_next_steps() {
     local profile="gs"
     [ "$ROLE" = "air" ] && profile="drone"
     log ""
-    log "Done. Next steps:"
-    if [ -z "$ONLY" ]; then
-        log "  1. If this is the first install on this pair, provision keys:"
-        log "       ./scripts/wfb-keys-provision --role $ROLE <peer-host>"
-        log "  2. Reboot to pick up UART/console changes (air role) and confirm"
-        log "     the driver survives a reboot: dkms status"
-        log "  3. Verify: wfb-cli $profile   (see docs/install.md)"
+    if [ -n "$ONLY" ]; then
+        log "Done with stage $ONLY."
+        return 0
     fi
+    log "Done. Next steps:"
+    log "  1. If this is the first install on this pair, provision keys:"
+    log "       ./scripts/wfb-keys-provision --role $ROLE <peer-host>"
+    log "  2. Reboot to pick up UART/console changes (air role) and confirm"
+    log "     the driver survives a reboot: dkms status"
+    log "  3. Verify: wfb-cli $profile   (see docs/install.md)"
 }
 print_next_steps

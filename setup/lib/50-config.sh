@@ -17,9 +17,15 @@ stage_config() {
     local role_tpl
     [ "$ROLE" = "air" ] && role_tpl="$WFB_CFG_ROLE_TPL_AIR" || role_tpl="$WFB_CFG_ROLE_TPL_GS"
 
+    # NOTE: deliberately NOT using `trap ... RETURN` for cleanup here. In
+    # bash, a RETURN trap set inside a function is NOT scoped to that call --
+    # it stays armed and fires again on the *next* function/sourced-script
+    # return anywhere later in the script, by which point tmp_common/tmp_role
+    # (local to this call frame) no longer exist, and `set -u` turns that
+    # into an "unbound variable" crash in a completely unrelated later stage.
+    # Explicit cleanup at every exit point instead.
     local tmp_common tmp_role
     tmp_common="$(mktemp)"; tmp_role="$(mktemp)"
-    trap 'rm -f "$tmp_common" "$tmp_role"' RETURN
 
     local common_vars='$WIFI_CHANNEL $WIFI_REGION $WIFI_TXPOWER $BANDWIDTH $MCS_INDEX $STBC $LDPC $SHORT_GI $MAVLINK_SYS_ID $FEC_MAVLINK_K $FEC_MAVLINK_N $FEC_MAVLINK_TIMEOUT $FEC_TUNNEL_K $FEC_TUNNEL_N $FEC_TUNNEL_TIMEOUT $FEC_VIDEO_K $FEC_VIDEO_N'
     render_template "$WFB_CFG_COMMON_TPL" "$tmp_common" "$common_vars"
@@ -33,6 +39,7 @@ stage_config() {
 
     if [ "${DRY_RUN:-0}" = "1" ]; then
         log "[dry-run] would write $WFB_CFG_OUT from $WFB_CFG_COMMON_TPL + $role_tpl"
+        rm -f "$tmp_common" "$tmp_role"
         return 0
     fi
 
@@ -46,6 +53,7 @@ stage_config() {
     log "Wrote $WFB_CFG_OUT"
 
     log "Effective radio-section fingerprint (compare this to the peer -- must match): $(sha256_short "$tmp_common")"
+    rm -f "$tmp_common" "$tmp_role"
 }
 
 _config_validate() {
@@ -130,12 +138,16 @@ _config_validate() {
 }
 
 _config_compute_derived() {
+    # AIR_MAVLINK_PEER only ends up used in the air-side template, but it's
+    # computed here regardless of $ROLE (harmless either way) -- only LOG it
+    # on the air role, though, so a gs-role run doesn't print a misleading
+    # "air unit will..." line about a value it isn't actually acting on.
     if [ -n "$MAVLINK_UDP_PORT" ]; then
         AIR_MAVLINK_PEER="listen://0.0.0.0:${MAVLINK_UDP_PORT}"
-        log "MAVLink: air unit will LISTEN for UDP on port $MAVLINK_UDP_PORT (MAVLINK_SERIAL ignored)"
+        [ "$ROLE" = "air" ] && log "MAVLink: air unit will LISTEN for UDP on port $MAVLINK_UDP_PORT (MAVLINK_SERIAL ignored)"
     else
         AIR_MAVLINK_PEER="serial:${MAVLINK_SERIAL}:${MAVLINK_BAUD}"
-        log "MAVLink: air unit will open $MAVLINK_SERIAL @ $MAVLINK_BAUD baud"
+        [ "$ROLE" = "air" ] && log "MAVLink: air unit will open $MAVLINK_SERIAL @ $MAVLINK_BAUD baud"
     fi
     export AIR_MAVLINK_PEER
 }

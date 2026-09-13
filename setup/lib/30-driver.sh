@@ -21,6 +21,17 @@ stage_driver() {
     local pkg_name pkg_ver dkms_id
 
     _driver_clone
+
+    if [ "${DRY_RUN:-0}" = "1" ] && [ ! -f "$DRIVER_SRC_DIR/dkms.conf" ]; then
+        # Dry-run correctly skipped the actual clone, so there's no real
+        # dkms.conf to read PACKAGE_NAME/PACKAGE_VERSION from yet -- that's
+        # expected, not an error. Nothing past this point can be meaningfully
+        # simulated without the real source tree, so stop here for THIS
+        # stage rather than reporting a false failure.
+        log "[dry-run] would read PACKAGE_NAME/PACKAGE_VERSION from a real clone's dkms.conf, then dkms add/build/install against kernel $KVER"
+        return 0
+    fi
+
     pkg_name="$(_driver_dkms_field PACKAGE_NAME)"
     pkg_ver="$(_driver_dkms_field PACKAGE_VERSION)"
     [ -n "$pkg_name" ] && [ -n "$pkg_ver" ] || die "Could not read PACKAGE_NAME/PACKAGE_VERSION from $DRIVER_SRC_DIR/dkms.conf"

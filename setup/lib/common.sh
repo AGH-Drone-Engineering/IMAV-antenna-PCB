@@ -9,7 +9,15 @@ else
     C_RED=""; C_YEL=""; C_GRN=""; C_RST=""
 fi
 
-log()  { printf '%s[+]%s %s\n' "$C_GRN" "$C_RST" "$*"; }
+# All installer commentary (log/warn/die, and run's own transcript lines)
+# goes to STDERR, deliberately, all through the same stream. Mixing stdout
+# and stderr for progress/warning messages means their relative order can
+# get scrambled whenever output is captured through a pipe or over SSH
+# (each stream is buffered independently) -- confusing at best, and actively
+# misleading if you're comparing against the example transcripts in
+# docs/install.md. Only actual command output (apt/dkms/etc, invoked by
+# `run` as "$@") keeps going wherever the command itself sends it.
+log()  { printf '%s[+]%s %s\n' "$C_GRN" "$C_RST" "$*" >&2; }
 warn() { printf '%s[!]%s %s\n' "$C_YEL" "$C_RST" "$*" >&2; }
 die()  { printf '%s[x]%s %s\n' "$C_RED" "$C_RST" "$*" >&2; exit 1; }
 
@@ -17,10 +25,10 @@ die()  { printf '%s[x]%s %s\n' "$C_RED" "$C_RST" "$*" >&2; exit 1; }
 # so installer output doubles as a transcript of exactly what happened.
 run() {
     if [ "${DRY_RUN:-0}" = "1" ]; then
-        printf '    %s[dry-run]%s %s\n' "$C_YEL" "$C_RST" "$*"
+        printf '    %s[dry-run]%s %s\n' "$C_YEL" "$C_RST" "$*" >&2
         return 0
     fi
-    printf '    %s\n' "$*"
+    printf '    %s\n' "$*" >&2
     "$@"
 }
 
