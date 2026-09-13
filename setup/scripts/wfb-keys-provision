@@ -15,39 +15,54 @@
 # transfer-integrity check, not a cryptographic pairing check -- the two
 # key files are legitimately different content), chmod it on the far end,
 # then shred the local copy.
+#
+# Runs as root (needs to read/chmod /etc/*.key), but talks to the peer as
+# PEER_USER, not root: stock Raspberry Pi OS has no root password and no
+# root SSH trust set up. PEER_USER defaults to $SUDO_USER -- the account
+# that ran `sudo` to get here -- since that account, not root, is the one
+# that can plausibly already have (or be given) SSH key trust to the peer.
+# The outgoing key is staged in /tmp owned by PEER_USER so it can scp its
+# own copy without needing root's own SSH identity; the remote install
+# step uses `sudo` on the peer instead of relying on a root login there.
 set -Eeuo pipefail
 
 usage() {
     cat <<'EOF'
 Usage: wfb-keys-provision --role air|gs <peer-host> [peer-user] [peer-ssh-port]
 
-Run this on the host that just generated a NEW keypair (install.sh's key
-stage tells you to). --role must match what THIS host is (air or gs) --
-it determines which key file this host keeps and which one gets shipped
-to the peer.
+Run this (with sudo) on the host that just generated a NEW keypair
+(install.sh's key stage tells you to). --role must match what THIS host
+is (air or gs) -- it determines which key file this host keeps and which
+one gets shipped to the peer. peer-user defaults to $SUDO_USER (the
+account you ran sudo as) and needs passwordless SSH key trust to that
+same account on the peer host, and passwordless sudo there.
 
   air host keeps /etc/drone.key, ships /etc/gs.key to the peer
   gs  host keeps /etc/gs.key,    ships /etc/drone.key to the peer
 
 Examples:
-  ./scripts/wfb-keys-provision --role air 192.168.1.50
-  ./scripts/wfb-keys-provision --role gs  raspberrypi-drone.local pi 22
+  sudo ./scripts/wfb-keys-provision --role air 192.168.1.50
+  sudo ./scripts/wfb-keys-provision --role gs  raspberrypi-drone.local pi 22
 EOF
 }
 
 ROLE=""
 PEER_HOST=""
-PEER_USER="root"
+PEER_USER="${SUDO_USER:-root}"
 PEER_PORT="22"
+_npos=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --role) ROLE="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *)
-            if [ -z "$PEER_HOST" ]; then PEER_HOST="$1";
-            elif [ "$PEER_USER" = "root" ]; then PEER_USER="$1";
-            else PEER_PORT="$1"; fi
+            case "$_npos" in
+                0) PEER_HOST="$1" ;;
+                1) PEER_USER="$1" ;;
+                *) PEER_PORT="$1" ;;
+            esac
+            _npos=$((_npos + 1))
             shift ;;
     esac
 done
@@ -55,6 +70,7 @@ done
 [[ "$ROLE" =~ ^(air|gs)$ ]] || { usage; echo; echo "ERROR: --role air|gs is required." >&2; exit 1; }
 [ -n "$PEER_HOST" ] || { usage; echo; echo "ERROR: peer host is required." >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || { echo "ERROR: run as root (needs to read/chmod /etc/*.key)." >&2; exit 1; }
+[ "$PEER_USER" != "root" ] || { echo "ERROR: PEER_USER resolved to root (no SUDO_USER, and no peer-user given). Stock Raspberry Pi OS has no root SSH login -- run this with sudo as a normal user, or pass peer-user explicitly." >&2; exit 1; }
 
 if [ "$ROLE" = "air" ]; then own_key=drone.key; peer_key=gs.key; else own_key=gs.key; peer_key=drone.key; fi
 
@@ -70,20 +86,28 @@ fi
 echo "==> Sending /etc/$peer_key to ${PEER_USER}@${PEER_HOST}:22 (port $PEER_PORT)"
 local_hash="$(sha256sum "/etc/$peer_key" | cut -d' ' -f1)"
 
-scp -P "$PEER_PORT" "/etc/$peer_key" "${PEER_USER}@${PEER_HOST}:/tmp/${peer_key}.incoming"
-remote_hash="$(ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "sha256sum /tmp/${peer_key}.incoming | cut -d' ' -f1")"
+# /etc/$peer_key is root-only (0600, owned by root); PEER_USER's own SSH
+# identity is what has trust to the peer, not root's -- so stage a copy
+# that user can read and send themselves, rather than needing root's own
+# key trusted on the peer too. Removed right after the scp either way.
+stage="/tmp/${peer_key}.outgoing.$$"
+install -m 0600 -o "$PEER_USER" "/etc/$peer_key" "$stage"
+trap 'rm -f "$stage"' EXIT
+
+sudo -u "$PEER_USER" scp -P "$PEER_PORT" "$stage" "${PEER_USER}@${PEER_HOST}:/tmp/${peer_key}.incoming"
+remote_hash="$(sudo -u "$PEER_USER" ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "sha256sum /tmp/${peer_key}.incoming | cut -d' ' -f1")"
 
 if [ "$local_hash" != "$remote_hash" ]; then
     echo "ERROR: transfer integrity check FAILED." >&2
     echo "  local:  $local_hash" >&2
     echo "  remote: $remote_hash" >&2
     echo "NOT shredding the local copy. Re-run this script." >&2
-    ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "rm -f /tmp/${peer_key}.incoming" || true
+    sudo -u "$PEER_USER" ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "rm -f /tmp/${peer_key}.incoming" || true
     exit 1
 fi
 
 echo "==> Transfer verified (sha256: ${local_hash:0:16}...). Installing on peer."
-ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "install -D -m 0600 /tmp/${peer_key}.incoming /etc/${peer_key} && rm -f /tmp/${peer_key}.incoming"
+sudo -u "$PEER_USER" ssh -p "$PEER_PORT" "${PEER_USER}@${PEER_HOST}" "sudo install -D -m 0600 /tmp/${peer_key}.incoming /etc/${peer_key} && rm -f /tmp/${peer_key}.incoming"
 
 echo "==> Removing local copy of the peer's key (we don't keep it here)"
 if command -v shred >/dev/null 2>&1; then
