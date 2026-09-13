@@ -14,6 +14,15 @@ stage_services() {
 
     log "Enabling and starting wifibroadcast@${profile}"
     run systemctl daemon-reload
+    # wifibroadcast@.service's own [Install] section is WantedBy=wifibroadcast.service
+    # (the package's empty aggregate unit, not multi-user.target), so enabling
+    # only the instance does not make it start at boot: nothing pulls
+    # wifibroadcast.service in unless it is separately enabled. Confirmed on
+    # real hardware: with only the instance enabled, the unit stayed inactive
+    # for over an hour after a reboot, activating only on a later manual
+    # start; enabling the aggregate unit as well brought it active within
+    # seconds of the next boot.
+    run systemctl enable wifibroadcast.service
     # `|| true` matters: `systemctl enable --now` can itself return non-zero
     # when the unit fails to activate (e.g. no wfb-capable NIC found yet --
     # confirmed on real hardware: wfb-server exits 2 immediately if wfb-nics

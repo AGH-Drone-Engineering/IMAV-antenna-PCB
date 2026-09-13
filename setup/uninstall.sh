@@ -51,6 +51,7 @@ log "Stopping services"
 # found" from systemctl on stderr is informative, not noise worth hiding.
 run systemctl disable --now wifibroadcast@drone || true
 run systemctl disable --now wifibroadcast@gs || true
+run systemctl disable wifibroadcast.service || true
 run systemctl disable --now wfb-video-air.service || true
 run systemctl disable --now rtsp@h264.service || true
 run systemctl disable --now rtsp@h265.service || true
