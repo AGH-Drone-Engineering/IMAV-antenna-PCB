@@ -45,22 +45,63 @@ _wfb_ng_add_repo() {
     log "Wrote $WFB_LIST"
 }
 
-# The wfb_tun binary is built by the driver's Makefile but is (as of this
-# writing) absent from wfb-ng's own setup.py data_files list -- meaning it is
-# NOT GUARANTEED to be part of the .deb. Without it there is no IP tunnel,
-# and without the tunnel there is no SSH in this MVP. Check for it explicitly
-# rather than discovering the gap later as "why doesn't ssh work".
+# wfb_tun is built by wfb-ng's OWN Makefile (all_bin target) but is -- as
+# confirmed against the real package on real hardware, not just read in
+# source -- absent from wfb-ng's setup.py data_files list, so the .deb does
+# not ship it. Without it there is no IP tunnel, and without the tunnel
+# there is no SSH in this MVP. Rather than just warning and leaving it as a
+# manual troubleshooting step, build and install it ourselves: it's a small,
+# dependency-light binary (libevent only) with a stable local IPC protocol,
+# and SSH is core MVP scope, not an optional extra.
+TUN_SRC_DIR="/usr/src/wfb-ng-tun-src"
+
 _wfb_ng_verify_tun_binary() {
     if [ "${DRY_RUN:-0}" = "1" ]; then
-        log "[dry-run] would verify wfb_tun is installed by the package"
+        log "[dry-run] would verify wfb_tun is installed by the package, and build it ourselves if not"
         return 0
     fi
     if dpkg -L wfb-ng 2>/dev/null | grep -q 'wfb_tun$'; then
         log "wfb_tun present (tunnel/SSH path is available)"
-    else
-        warn "wfb_tun was NOT found in the wfb-ng package file list."
-        warn "This means the IP tunnel (and therefore SSH over the link) will"
-        warn "NOT come up, even though everything else in this installer succeeds."
-        warn "See docs/troubleshooting.md for building/installing wfb_tun manually."
+        return 0
     fi
+    if command -v wfb_tun >/dev/null 2>&1; then
+        log "wfb_tun not in the package, but already built and installed at $(command -v wfb_tun) -- skipping rebuild"
+        return 0
+    fi
+
+    warn "wfb_tun was NOT found in the wfb-ng package file list (confirmed: this is a"
+    warn "real gap in the .deb, not a guess). Building it from source instead --"
+    warn "SSH over the tunnel needs it."
+    _wfb_ng_build_tun
+}
+
+# Build wfb_tun from the EXACT commit the installed package itself was built
+# from (not just "whatever is on master right now"), so the binary can never
+# silently drift from the installed wfb-ng version -- including on a host
+# where VERSIONS pins an older/different snapshot than "current master".
+# That commit is recorded by wfb-ng's own build process in site.cfg, which
+# is why we read it from there instead of assuming anything.
+_wfb_ng_build_tun() {
+    local site_cfg commit
+    site_cfg="$(dpkg -L wfb-ng 2>/dev/null | grep 'conf/site\.cfg$' | head -1)"
+    [ -n "$site_cfg" ] && [ -f "$site_cfg" ] || die "Could not locate wfb-ng's site.cfg to determine its exact build commit. Build wfb_tun manually -- see docs/troubleshooting.md."
+    commit="$(grep -E "^commit = " "$site_cfg" | sed -E "s/^commit = '([0-9a-f]+)'/\1/")"
+    [ -n "$commit" ] || die "Could not read the build commit out of $site_cfg."
+    log "Installed wfb-ng was built from commit $commit -- building wfb_tun from the same commit"
+
+    run apt-get install -y libevent-dev
+
+    if [ -d "$TUN_SRC_DIR/.git" ]; then
+        run git -C "$TUN_SRC_DIR" fetch --depth 1 origin "$commit"
+    else
+        run git clone https://github.com/svpcom/wfb-ng.git "$TUN_SRC_DIR"
+        run git -C "$TUN_SRC_DIR" fetch --depth 1 origin "$commit"
+    fi
+    run git -C "$TUN_SRC_DIR" checkout --detach FETCH_HEAD
+
+    log "Building wfb_tun"
+    ( cd "$TUN_SRC_DIR" && run make wfb_tun ) || die "Building wfb_tun from source failed. See docs/troubleshooting.md."
+
+    install_file "$TUN_SRC_DIR/wfb_tun" /usr/bin/wfb_tun 0755
+    log "wfb_tun built and installed: $(/usr/bin/wfb_tun --help 2>&1 | grep -o 'WFB-ng version.*')"
 }

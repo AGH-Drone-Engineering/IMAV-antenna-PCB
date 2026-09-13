@@ -70,15 +70,21 @@ carrier board's battery/BEC leads (`POWER_SOURCE=hub` or `external` in
 ---
 
 **No `drone-wfb`/`gs-wfb` interface at all (not just down — genuinely absent).**
-→ `wfb_tun` may not actually be installed. It's built by the driver's
-Makefile but, as of this writing, isn't listed in wfb-ng's own packaging
-metadata — meaning it's not guaranteed to ship in the `.deb`.
+→ `wfb_tun` isn't listed in wfb-ng's own packaging metadata and doesn't
+actually ship in the `.deb` — confirmed on real hardware, not a maybe.
+`lib/40-wfb-ng.sh` handles this automatically: it detects the gap, reads
+the *exact* commit the installed package was built from (out of its own
+`site.cfg`, so the built binary can never drift from whatever version is
+pinned), and builds/installs `wfb_tun` from that same commit. You shouldn't
+need to do anything — this is what "Done with stage 40-wfb-ng" already did
+during install. If the interface is still missing after that:
 ```sh
-dpkg -L wfb-ng | grep wfb_tun
+command -v wfb_tun && wfb_tun --help   # should show a WFB-ng version line
+dpkg -L wfb-ng | grep wfb_tun          # empty is expected/normal
 ```
-If that's empty: build `wfb_tun` from the wfb-ng source tree yourself and
-install the binary to `/usr/bin/wfb_tun` (matching what the rest of the
-package expects), then restart the service.
+If `wfb_tun` genuinely isn't there, re-run `sudo ./install.sh --role
+air|gs --only 40-wfb-ng` and read the build output — `libevent-dev` missing
+or a network hiccup during the clone are the two realistic failure modes.
 
 ---
 
