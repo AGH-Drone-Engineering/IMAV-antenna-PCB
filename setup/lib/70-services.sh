@@ -14,7 +14,14 @@ stage_services() {
 
     log "Enabling and starting wifibroadcast@${profile}"
     run systemctl daemon-reload
-    run systemctl enable --now "wifibroadcast@${profile}"
+    # `|| true` matters: `systemctl enable --now` can itself return non-zero
+    # when the unit fails to activate (e.g. no wfb-capable NIC found yet --
+    # confirmed on real hardware: wfb-server exits 2 immediately if wfb-nics
+    # returns nothing, and --now surfaces that as enable's own exit code).
+    # Under `set -e`, an unguarded failure here would abort the script
+    # BEFORE reaching the diagnostic check below -- exactly the case that
+    # check exists to handle. Let it fail, then diagnose properly.
+    run systemctl enable --now "wifibroadcast@${profile}" || true
 
     if [ "${DRY_RUN:-0}" = "1" ]; then
         return 0
