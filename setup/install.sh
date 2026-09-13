@@ -245,7 +245,7 @@ print_next_steps() {
     fi
     log "Done. Next steps:"
     log "  1. If this is the first install on this pair, provision keys:"
-    log "       ./scripts/wfb-keys-provision --role $ROLE <peer-host>"
+    log "       sudo ./scripts/wfb-keys-provision --role $ROLE <peer-host>"
     log "  2. Reboot to pick up UART/console changes (air role) and confirm"
     log "     the driver survives a reboot: dkms status"
     log "  3. Verify: wfb-cli $profile   (see docs/install.md)"

@@ -45,5 +45,5 @@ stage_keys() {
     log "    ssh <peer-host> chmod 600 /etc/$other"
     log "    shred -u /etc/$other      # don't leave the peer's key lying around here"
     log ""
-    log "Or just run: ./scripts/wfb-keys-provision --role $ROLE <peer-host>   (does all of the above)"
+    log "Or just run: sudo ./scripts/wfb-keys-provision --role $ROLE <peer-host>   (does all of the above)"
 }

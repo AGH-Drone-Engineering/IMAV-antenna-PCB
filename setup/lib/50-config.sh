@@ -14,6 +14,9 @@ stage_config() {
     _config_validate
     _config_compute_derived
 
+    local fingerprint; fingerprint="$(_radio_fingerprint)"
+    log "Radio-section fingerprint (compare to the peer -- must match): $fingerprint"
+
     local role_tpl
     [ "$ROLE" = "air" ] && role_tpl="$WFB_CFG_ROLE_TPL_AIR" || role_tpl="$WFB_CFG_ROLE_TPL_GS"
 
@@ -51,9 +54,20 @@ stage_config() {
         cat "$tmp_role"
     } > "$WFB_CFG_OUT"
     log "Wrote $WFB_CFG_OUT"
-
-    log "Effective radio-section fingerprint (compare this to the peer -- must match): $(sha256_short "$tmp_common")"
     rm -f "$tmp_common" "$tmp_role"
+}
+
+# _radio_fingerprint — sha256_short_str of RADIO_VARS' current values
+# (install.sh:157), joined in fixed order. Identical output on both ends
+# requires and only requires those values to match; a link.conf.local
+# override on any other variable (WIFI_TXPOWER, MAVLINK_SYS_ID, etc.) does
+# not change it.
+_radio_fingerprint() {
+    local v s=""
+    for v in "${RADIO_VARS[@]}"; do
+        s="${s}${v}=${!v}|"
+    done
+    sha256_short_str "$s"
 }
 
 _config_validate() {

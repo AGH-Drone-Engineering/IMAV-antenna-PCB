@@ -98,3 +98,8 @@ render_template() {
 sha256_short() {
     sha256sum "$1" 2>/dev/null | cut -c1-16
 }
+
+# sha256_short_str STRING — same, for an arbitrary string instead of a file.
+sha256_short_str() {
+    printf '%s' "$1" | sha256sum | cut -c1-16
+}

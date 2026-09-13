@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# setup/scripts/wfb-doctor — one-shot diagnostic dump. Run this first when
-# something isn't working; it's the checklist from docs/troubleshooting.md
-# turned into a single command. Safe to run without root (some checks will
-# just report "skipped, need root").
+# setup/scripts/wfb-doctor — one-shot diagnostic dump covering driver,
+# services, tunnel, and video state. Runs without root; sbin-only tools
+# (dkms, ethtool) are located explicitly since a non-root, non-interactive
+# PATH typically excludes /usr/sbin.
 set -uo pipefail
 
 section() { printf '\n\033[1m== %s ==\033[0m\n' "$1"; }
+
+# find_bin NAME — PATH lookup, falling back to /usr/sbin and /sbin.
+find_bin() {
+    command -v "$1" 2>/dev/null && return 0
+    for d in /usr/sbin /sbin; do
+        [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }
+    done
+    return 1
+}
 
 section "USB enumeration (expect 0bda:a81a)"
 if command -v lsusb >/dev/null 2>&1; then
@@ -18,8 +27,10 @@ section "Kernel driver binding"
 nic="$(wfb-nics 2>/dev/null | head -1)"
 if [ -n "$nic" ]; then
     echo "wfb-nics reports: $nic"
-    if command -v ethtool >/dev/null 2>&1; then
-        ethtool -i "$nic" 2>/dev/null | grep -E 'driver|version' || echo "ethtool -i $nic failed"
+    if ethtool_bin="$(find_bin ethtool)"; then
+        "$ethtool_bin" -i "$nic" 2>/dev/null | grep -E 'driver|version' || echo "ethtool -i $nic failed"
+    else
+        echo "ethtool not found"
     fi
     ip -brief link show "$nic" 2>/dev/null
 else
@@ -28,10 +39,10 @@ else
 fi
 
 section "DKMS status"
-if command -v dkms >/dev/null 2>&1; then
-    dkms status 2>/dev/null | grep -i 'rtl88x2eu\|realtek-rtl88x2eu' || echo "No matching DKMS module registered."
+if dkms_bin="$(find_bin dkms)"; then
+    "$dkms_bin" status 2>/dev/null | grep -i 'rtl88x2eu\|realtek-rtl88x2eu' || echo "No matching DKMS module registered."
 else
-    echo "dkms not installed"
+    echo "dkms not found"
 fi
 
 section "wfb-ng package"
@@ -50,7 +61,7 @@ done
 section "Tunnel interfaces (drone-wfb / gs-wfb)"
 ip -brief addr show 2>/dev/null | grep -E 'drone-wfb|gs-wfb' || echo "Neither tunnel interface is up."
 
-section "Video (phase 2)"
+section "Video"
 if [ -f /usr/local/bin/wfb-video-air ]; then
     echo "Generated pipeline script: present (/usr/local/bin/wfb-video-air)"
 else
@@ -62,9 +73,62 @@ for codec in h264 h265; do
     state="$(systemctl is-active "rtsp@${codec}.service" 2>/dev/null || true)"
     [ -n "$state" ] && echo "rtsp@${codec}.service: $state"
 done
-echo "Video streams (udp 5602 air-side listen, 5600 gs-side forward) carry no"
-echo "counters of their own outside wfb-cli -- check wfb-cli's video pane for"
-echo "non-zero traffic, and watch for 'trunc' (payload over radio_mtu)."
+
+section "Stream stats (live API)"
+profile=""
+systemctl is-active --quiet wifibroadcast@drone 2>/dev/null && profile=drone
+systemctl is-active --quiet wifibroadcast@gs 2>/dev/null && profile=gs
+if [ -z "$profile" ]; then
+    echo "wifibroadcast@drone/@gs not active -- no API to query."
+elif ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 not found -- can't query the stats API. Use: wfb-cli $profile"
+else
+    port=8102
+    [ "$profile" = gs ] && port=8103
+    timeout 5 python3 -u - "$port" <<'PYEOF'
+import json, socket, sys, time
+
+port = int(sys.argv[1])
+rows = {}
+deadline = time.monotonic() + 2.5
+try:
+    s = socket.create_connection(("127.0.0.1", port), timeout=1)
+    buf = b""
+    while time.monotonic() < deadline:
+        s.settimeout(max(0.1, deadline - time.monotonic()))
+        try:
+            chunk = s.recv(4096)
+        except socket.timeout:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if d.get("type") in ("tx", "rx"):
+                rows[d["id"]] = d
+except OSError:
+    pass
+
+if not rows:
+    print("no stats frames received on port %d" % port)
+else:
+    for sid in sorted(rows):
+        d = rows[sid]
+        p = d.get("packets", {})
+        if d["type"] == "tx":
+            print("  %-12s incoming=%-6d injected=%-6d dropped=%d" % (
+                sid, p.get("incoming", [0])[0], p.get("injected", [0])[0], p.get("dropped", [0])[0]))
+        else:
+            print("  %-12s all=%-6d dec_err=%-4d lost=%-4d fec_rec=%d" % (
+                sid, p.get("all", [0])[0], p.get("dec_err", [0])[0], p.get("lost", [0])[0], p.get("fec_rec", [0])[0]))
+print("(counts are per the last ~1s interval; non-zero 'dec_err' on any stream means mismatched keys)")
+PYEOF
+fi
 
 section "Link config fingerprint"
 if [ -f /etc/wifibroadcast.cfg ]; then
