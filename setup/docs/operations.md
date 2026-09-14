@@ -58,9 +58,10 @@ sudo ./install.sh --role air|gs --only 30-driver --force-driver
    sudo ./install.sh --role air|gs --only 50-config
    sudo systemctl restart wifibroadcast@drone   # or @gs
    ```
-3. For a change to a RADIO setting (`link.conf`'s first section), do this
-   on **both** hosts and compare the fingerprint `--only 50-config`
-   prints — it must match.
+3. For a change to `WIFI_CHANNEL`, `BANDWIDTH`, `MCS_INDEX`, `LINK_DOMAIN`
+   (in SETTINGS), or `WIFI_REGION`, `STBC`, `LDPC`, `SHORT_GI` (in
+   INTERNALS) — all eight must match on both ends — do this on **both**
+   hosts and compare the fingerprint `--only 50-config` prints.
 4. For a `VIDEO_*` change: `sudo ./install.sh --role air|gs --only
    90-video` instead of `50-config`, on both ends if `VIDEO_CODEC`
    changed.

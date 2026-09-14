@@ -97,9 +97,9 @@ relative, not absolute.
 | `WIFI_TXPOWER` | Use |
 |---|---|
 | 300 | Desk test, transmitters a meter apart |
-| 500 | Default, `POWER_SOURCE=usb-pi` |
+| 500 | Bench value for `POWER_SOURCE=usb-pi` (`link.conf.local`) |
 | 800 | `TXPOWER_MAX_USB` ceiling |
-| 1000-1500 | Field use with external power and a heatsink |
+| 1500 | Shipped default, `POWER_SOURCE=external`, with a heatsink |
 | 2000 | `TXPOWER_MAX_EXTERNAL` ceiling; PA saturation threshold |
 | 3150 | Driver's hard maximum |
 

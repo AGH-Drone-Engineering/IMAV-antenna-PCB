@@ -23,9 +23,20 @@ On both Pis:
 2. Fit both antennas now, before any power is applied, and leave them on
    for the rest of this guide. This chipset has no antenna-lost
    protection: transmitting without one destroys the amplifier.
-3. Connect the module's USB-C to the Pi. `POWER_SOURCE=usb-pi` (the
-   default in `link.conf`) is correct for this step — see
-   `docs/tuning.md` before changing it.
+3. Connect the module's USB-C to the Pi. **`link.conf` ships set for field
+   use (`POWER_SOURCE=external`, `WIFI_TXPOWER=1500`) — not for this bench
+   step.** `install.sh` validates `WIFI_TXPOWER` against whatever
+   `POWER_SOURCE` you declare, not against how the module is actually
+   wired, so it will not catch this on its own. Before running the
+   installer, create `link.conf.local` (copy
+   `link.conf.local.example`) with:
+   ```sh
+   POWER_SOURCE=usb-pi
+   WIFI_TXPOWER=500
+   ```
+   Delete that file once the module is genuinely powered from the carrier
+   board's battery/BEC leads. See `docs/tuning.md` for why both lines are
+   needed together.
 
 ## 2. Drone's Pi: clone and install
 

@@ -29,11 +29,14 @@ sockets on localhost, plus an IP tunnel for anything else.
 - Both antennas must be fitted before transmitting, always. This module
   has no antenna-lost protection — transmitting without one destroys the
   power amplifier, with no warning from the hardware.
-- Don't power the module from a Raspberry Pi USB port for real use — a
-  Pi's USB budget is well under what this module draws at useful power.
-  `POWER_SOURCE=usb-pi` (the default) caps TX power for bench bring-up
-  only. See `docs/tuning.md` for the numbers and the other
-  `POWER_SOURCE` options.
+- Don't power the module from a Raspberry Pi USB port at the power
+  `link.conf` ships with — a Pi's USB budget is well under what this
+  module draws at 1500. `link.conf` is set for field use
+  (`POWER_SOURCE=external`); for bench work over USB-C, override it in
+  `link.conf.local` to `POWER_SOURCE=usb-pi` and `WIFI_TXPOWER=500` —
+  `install.sh` validates `WIFI_TXPOWER` against the `POWER_SOURCE` you
+  declare, not against the actual wiring, so an unmodified `link.conf` on
+  bench power will not be caught. See `docs/tuning.md` for the numbers.
 - Channel 165 (5825 MHz) is not EU-harmonised for general RLAN use.
   `WIFI_REGION` only lifts the driver's own restrictions — it does not
   make the transmission legal. See `docs/tuning.md` before transmitting
@@ -80,7 +83,7 @@ Full walkthrough: **[docs/install.md](docs/install.md)**.
 
 | Path | What |
 |---|---|
-| `link.conf` | The one file you edit — channel, power, MAVLink, FEC, tunnel, video |
+| `link.conf` | The one file you edit — SETTINGS section: channel, power, MAVLink, camera |
 | `link.conf.local.example` | Copy to `link.conf.local` for host-specific overrides (gitignored) |
 | `VERSIONS` | Pinned driver/wfb-ng versions |
 | `install.sh` | Entrypoint — `sudo ./install.sh --role air\|gs [flags]`, see `--help` |

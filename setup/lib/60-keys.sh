@@ -40,10 +40,11 @@ stage_keys() {
     chmod 0600 /etc/drone.key /etc/gs.key
     log "Generated /etc/drone.key and /etc/gs.key"
     log ""
-    log "Next: copy the peer's half over and remove it from here. From this host:"
-    log "    scp /etc/$other <peer-host>:/etc/$other"
-    log "    ssh <peer-host> chmod 600 /etc/$other"
-    log "    shred -u /etc/$other      # don't leave the peer's key lying around here"
+    log "Next: copy the peer's half over and remove it from here:"
+    log "    sudo ./scripts/wfb-keys-provision --role $ROLE <peer-host>"
     log ""
-    log "Or just run: sudo ./scripts/wfb-keys-provision --role $ROLE <peer-host>   (does all of the above)"
+    log "That script exists because the manual version isn't just scp/ssh:"
+    log "stock Raspberry Pi OS has no root SSH login, so it reaches the peer"
+    log "using the SSH keys of the account that ran sudo, not root, and installs"
+    log "via sudo there. See scripts/wfb-keys-provision --help for the by-hand steps."
 }
