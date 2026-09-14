@@ -1,16 +1,36 @@
 # ============================================================================
 # setup/link.conf.local.example
 #
-# Copy to setup/link.conf.local (gitignored) to override link.conf values for
-# this host only.
+# Copy to setup/link.conf.local (gitignored) to override link.conf on this
+# host only. link.conf already holds the settings both ends share, including
+# the field power values -- what belongs here is only what differs between
+# the two machines, or between bench and field.
 #
-# Excluded: WIFI_CHANNEL, BANDWIDTH, MCS_INDEX, STBC, LDPC, SHORT_GI,
-# LINK_DOMAIN, WIFI_REGION. install.sh warns if link.conf.local overrides one
-# of these and prints a fingerprint of their combined value to compare
-# between hosts.
+# Overriding WIFI_CHANNEL, BANDWIDTH, MCS_INDEX, STBC, LDPC, SHORT_GI,
+# LINK_DOMAIN or WIFI_REGION here kills the link unless the peer matches:
+# install.sh warns about it and prints a fingerprint of those values to
+# compare between the hosts.
+#
+# After editing:
+#   sudo ./install.sh --role air|gs --only 50-config
+#   sudo systemctl restart wifibroadcast@drone   # or wifibroadcast@gs
 # ============================================================================
 
-# POWER_SOURCE=external
-# WIFI_TXPOWER=1500
+# --- Bench work (either host) ------------------------------------------------
+# Caps power for a module bus-powered from a Pi USB port. Both lines are
+# needed: at usb-pi the ceiling is TXPOWER_MAX_USB=800, and a higher
+# WIFI_TXPOWER inherited from link.conf aborts install.sh rather than being
+# reduced to fit. Delete this file to return to link.conf's field values.
+# POWER_SOURCE=usb-pi
+# WIFI_TXPOWER=500
 
+# --- Ground station ----------------------------------------------------------
+# QGroundControl running on another machine on the LAN instead of on this Pi.
+# Add a UDP connection in QGC pointing at this Pi's LAN address, port 14550.
 # QGC_HOST=192.168.1.50
+
+# --- Air ---------------------------------------------------------------------
+# The camera's own RTSP URL. Required on this host when VIDEO_ENABLE=1.
+# The camera and this Pi's eth0 need static addresses in the same subnet,
+# set outside this file -- see docs/integration.md.
+# VIDEO_CAM_URL=rtsp://192.168.10.50:554/stream1

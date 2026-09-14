@@ -42,20 +42,27 @@ sockets on localhost, plus an IP tunnel for anything else.
 ## Quickstart
 
 ```sh
-# on the drone's Pi:
+# 1. On the drone's Pi. This install also generates the keypair -- one key
+#    for this machine, one for the ground station:
 git clone <this-repo-url> && cd IMAV-antenna-PCB/setup
 sudo ./install.sh --role air
 
-# on the ground station's Pi:
+# 2. Still on the drone's Pi. Sends the ground station its key over SSH,
+#    then deletes the local copy of it:
+sudo ./scripts/wfb-keys-provision --role air <ground-station-host>
+
+# 3. Now on the ground station's Pi. Its key is already there from step 2,
+#    so this install won't ask to generate another one:
 git clone <this-repo-url> && cd IMAV-antenna-PCB/setup
 sudo ./install.sh --role gs
 
-# distribute keys (once per pair, on whichever host generated them):
-sudo ./scripts/wfb-keys-provision --role air <ground-station-host>   # or --role gs <drone-host>
-
-# verify:
+# 4. Verify, on either machine:
 sudo ./scripts/wfb-doctor
 ```
+
+Setting the ground station up first instead? Swap `air` and `gs` everywhere
+above — the machine you install first is the one that generates the keypair
+and hands the other its half.
 
 Full walkthrough: **[docs/install.md](docs/install.md)**.
 
