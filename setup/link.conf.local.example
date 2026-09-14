@@ -2,9 +2,13 @@
 # setup/link.conf.local.example
 #
 # Copy to setup/link.conf.local (gitignored) to override link.conf on this
-# host only. link.conf already holds the settings both ends share, including
-# the field power values -- what belongs here is only what differs between
-# the two machines, or between bench and field.
+# host only.
+#
+# This file is the exception, not the place you normally edit. Everything you
+# configure -- channel, power, MAVLink device, camera -- lives in link.conf's
+# SETTINGS section and is shared by both machines. Only two kinds of value
+# belong here: what must differ between the two machines, and what must
+# differ between bench and field.
 #
 # Overriding WIFI_CHANNEL, BANDWIDTH, MCS_INDEX, STBC, LDPC, SHORT_GI,
 # LINK_DOMAIN or WIFI_REGION here kills the link unless the peer matches:
@@ -26,11 +30,6 @@
 
 # --- Ground station ----------------------------------------------------------
 # QGroundControl running on another machine on the LAN instead of on this Pi.
-# Add a UDP connection in QGC pointing at this Pi's LAN address, port 14550.
+# Belongs here rather than in link.conf because the address depends on which
+# network you are on. Add a matching UDP connection in QGC, port 14550.
 # QGC_HOST=192.168.1.50
-
-# --- Air ---------------------------------------------------------------------
-# The camera's own RTSP URL. Required on this host when VIDEO_ENABLE=1.
-# The camera and this Pi's eth0 need static addresses in the same subnet,
-# set outside this file -- see docs/integration.md.
-# VIDEO_CAM_URL=rtsp://192.168.10.50:554/stream1
