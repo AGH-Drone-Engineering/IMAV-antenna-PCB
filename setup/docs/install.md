@@ -17,6 +17,8 @@ both the drone's Pi and the ground station's Pi.
 
 ## 1. Carrier board and module
 
+On both Pis:
+
 1. Mount the BL-M8812EU2 module on the carrier board.
 2. Fit both antennas now, before any power is applied, and leave them on
    for the rest of this guide. This chipset has no antenna-lost
@@ -25,35 +27,21 @@ both the drone's Pi and the ground station's Pi.
    default in `link.conf`) is correct for this step — see
    `docs/tuning.md` before changing it.
 
-## 2. Clone the repo
-
-On both Pis:
+## 2. Drone's Pi: clone and install
 
 ```sh
 git clone <this-repo-url>
 cd IMAV-antenna-PCB/setup
 ```
 
-## 3. Review `link.conf`
-
-Defaults (channel 165, 20 MHz, MCS1, `POWER_SOURCE=usb-pi`) install as-is.
-Change channel/power/etc. later with `--only 50-config` plus a service
-restart, no reinstall needed. Nothing needs editing for a first install
-unless MAVLink isn't coming from the Pi's own UART (`/dev/serial0`) — see
+`link.conf`'s defaults (channel 165, 20 MHz, MCS1) install as-is. Change
+channel/power/etc. later with `--only 50-config` plus a service restart,
+no reinstall needed. Nothing needs editing for a first install unless
+MAVLink isn't coming from the Pi's own UART (`/dev/serial0`) — see
 `docs/integration.md`.
-
-## 4. Run the installer
-
-Drone's Pi:
 
 ```sh
 sudo ./install.sh --role air
-```
-
-Ground station's Pi:
-
-```sh
-sudo ./install.sh --role gs
 ```
 
 What happens, in order: platform detection, then the antenna safety
@@ -71,40 +59,37 @@ Points to watch for:
   from. Expect a `git clone`/`make` here, not just an `apt install`.
 - **`50-config` prints a radio-section fingerprint** — a short hash of
   the settings that must be identical on both ends (channel, bandwidth,
-  region, MCS, STBC, LDPC, short GI, link domain). Compare it between the
-  two hosts once both have run this stage; a mismatch means one host's
-  `link.conf` or `link.conf.local` differs from the other's in one of
-  those fields.
-- **`60-keys` prompts** to generate a new keypair if `/etc/drone.key` or
-  `/etc/gs.key` is missing — expected on a first install, on exactly one
-  of the two hosts (see step 5).
+  region, MCS, STBC, LDPC, short GI, link domain). Compare it against the
+  ground station's once you've installed there too (step 4); a mismatch
+  means one host's `link.conf` or `link.conf.local` differs from the
+  other's in one of those fields.
+- **`60-keys` finds no `/etc/drone.key` on this, the first host in the
+  pair, and prompts to generate a new keypair.** Answer `y`. This creates
+  both `/etc/drone.key` (this host's) and `/etc/gs.key` (the ground
+  station's, temporarily, until step 3 ships it over).
 - **`80-payload` only acts on the air role**, and only when MAVLink comes
   over a UART (skipped if `MAVLINK_UDP_PORT` is set).
 - With `VIDEO_ENABLE=0` (the default), `90-video` does nothing: no video
   packages installed, no units touched.
 
-At the end the installer prints the next steps shown below (steps 5-7 of
-this guide).
-
 Every `link.conf` setting has a corresponding CLI flag for one-off
 overrides — run `./install.sh --help` for the full list, including
 `--dry-run` to preview what a run would do without writing anything.
 
-## 5. Provision keys
+## 3. Provision keys
 
-Needs doing once per pair, on whichever host generated a new keypair (the
-installer's prompt told you if it did — see `wfb_keygen`'s effect in
-`lib/60-keys.sh` if you want the detail). From that host:
+Do this now, from the drone's Pi, before installing the ground station —
+its own install will find the key already in place and skip the
+generate-a-keypair prompt entirely.
 
 ```sh
 sudo ./scripts/wfb-keys-provision --role air <ground-station-host>
-# or: sudo ./scripts/wfb-keys-provision --role gs <drone-host>
-# (role = the ROLE of the host you're running this ON, not the peer)
 ```
 
-This copies the peer's half of the keypair over SSH, verifies the hash of
-the file at its final path on the peer, installs it with the right
-permissions, and removes the local copy of the peer's half.
+This copies `/etc/gs.key` to the ground station over SSH, verifies the
+hash of the file at its final path there, installs it with the right
+permissions, and removes the local copy — this host keeps only
+`/etc/drone.key` afterward.
 
 Requires root on this host (`sudo`) because it writes into `/etc`, and
 reaches the peer using the SSH keys of the account you ran `sudo` from —
@@ -115,7 +100,25 @@ on the peer just mean no prompts. Pass a different peer-side account name
 as the argument after the host if it differs from yours. See
 `scripts/wfb-keys-provision --help`.
 
-## 6. Reboot
+Setting the ground station up first instead? Swap `air`/`gs` and
+`drone.key`/`gs.key` throughout steps 2-4 — whichever host you install
+first is the one that generates the pair.
+
+## 4. Ground station's Pi: clone and install
+
+```sh
+git clone <this-repo-url>
+cd IMAV-antenna-PCB/setup
+sudo ./install.sh --role gs
+```
+
+Same stages as step 2, with one difference: `60-keys` finds `/etc/gs.key`
+already there (from step 3) and logs `already exists -- keeping it`
+instead of prompting. If it prompts to generate a new keypair instead,
+step 3 didn't reach this host — stop and re-check it before continuing;
+answering `y` here would create a second, unrelated pair.
+
+## 5. Reboot
 
 The air unit's UART/console changes need a reboot to take effect:
 
@@ -123,7 +126,7 @@ The air unit's UART/console changes need a reboot to take effect:
 sudo reboot
 ```
 
-## 7. Verify
+## 6. Verify
 
 ```sh
 sudo ./scripts/wfb-doctor
@@ -140,7 +143,7 @@ without it. Expect:
 - Stream stats: non-zero `incoming`/`injected` on the tx side that's
   actually sending, non-zero `all` with `dec_err=0` on the rx side. Needs
   both ends up and passing real traffic — `dec_err` staying nonzero on
-  either side means the two ends have mismatched keys (redo step 5).
+  either side means the two ends have mismatched keys (redo step 3).
 
 If anything above doesn't match, `docs/troubleshooting.md` is organized
 by which of these checks failed.
